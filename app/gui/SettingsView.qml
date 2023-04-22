@@ -438,6 +438,7 @@ Flickable {
 
                             // Add unsupported FPS values
                             if (StreamingPreferences.unsupportedFps) {
+                                addRefreshRateOrdered(fpsListModel, 58, qsTr("%1 FPS (Unsupported)").arg(58))
                                 addRefreshRateOrdered(fpsListModel, 90, qsTr("%1 FPS (Unsupported)").arg(90))
                                 addRefreshRateOrdered(fpsListModel, 120, qsTr("%1 FPS (Unsupported)").arg(120))
                             }
