@@ -677,7 +677,7 @@ Flickable {
 
                     stepSize: 500
                     from : 500
-                    to: 150000
+                    to: 1500000
 
                     snapMode: "SnapOnRelease"
                     width: Math.min(bitrateDesc.implicitWidth, parent.width)
