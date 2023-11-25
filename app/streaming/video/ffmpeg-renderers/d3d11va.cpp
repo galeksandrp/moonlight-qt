@@ -989,6 +989,21 @@ bool D3D11VARenderer::checkDecoderSupport(IDXGIAdapter* adapter)
         }
         break;
 
+    case VIDEO_FORMAT_H265_MAIN8_444:
+        if (FAILED(videoDevice->CheckVideoDecoderFormat(&D3D11_DECODER_PROFILE_HEVC_VLD_MAIN, DXGI_FORMAT_AYUV, &supported))) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "GPU doesn't support HEVC Main8 444 decoding");
+            videoDevice->Release();
+            return false;
+        }
+        else if (!supported) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "GPU doesn't support HEVC Main8 444 decoding to AYUV format");
+            videoDevice->Release();
+            return false;
+        }
+        break;
+
     case VIDEO_FORMAT_H265_MAIN10:
         if (FAILED(videoDevice->CheckVideoDecoderFormat(&D3D11_DECODER_PROFILE_HEVC_VLD_MAIN10, DXGI_FORMAT_P010, &supported))) {
             SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
@@ -1029,6 +1044,21 @@ bool D3D11VARenderer::checkDecoderSupport(IDXGIAdapter* adapter)
         else if (!supported) {
             SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                          "GPU doesn't support AV1 Main10 decoding to P010 format");
+            videoDevice->Release();
+            return false;
+        }
+        break;
+
+    case VIDEO_FORMAT_AV1_HIGH8_444:
+        if (FAILED(videoDevice->CheckVideoDecoderFormat(&D3D11_DECODER_PROFILE_AV1_VLD_PROFILE1, DXGI_FORMAT_AYUV, &supported))) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "GPU doesn't support AV1 High8 444 decoding");
+            videoDevice->Release();
+            return false;
+        }
+        else if (!supported) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "GPU doesn't support AV1 High8 444 decoding to AYUV format");
             videoDevice->Release();
             return false;
         }

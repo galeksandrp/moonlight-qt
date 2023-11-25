@@ -402,6 +402,35 @@ void Session::getDecoderInfo(SDL_Window* window,
         isHdrSupported = false;
     }
 
+    // Try an HEVC Main8 444 decoder first to see if we have 444 support
+    if (chooseDecoder(StreamingPreferences::VDS_FORCE_HARDWARE,
+                      window, VIDEO_FORMAT_H265_MAIN8_444, 1920, 1080, 60,
+                      false, false, true, decoder)) {
+        isHardwareAccelerated = decoder->isHardwareAccelerated();
+        isFullScreenOnly = decoder->isAlwaysFullScreen();
+        is444Supported = decoder->is444Supported();
+        maxResolution = decoder->getDecoderMaxResolution();
+        delete decoder;
+
+        return;
+    }
+
+    // Try an AV1 High8 444 decoder next to see if we have 444 support
+    if (chooseDecoder(StreamingPreferences::VDS_FORCE_HARDWARE,
+                      window, VIDEO_FORMAT_AV1_HIGH8_444, 1920, 1080, 60,
+                      false, false, true, decoder)) {
+        // If we've got a working AV1 High 8-bit 444 decoder, we'll enable the 444 checkbox
+        // but we will still continue probing to get other attributes for HEVC or H.264
+        // decoders.
+        is444Supported = decoder->is444Supported();
+        delete decoder;
+    }
+    else {
+        // 444 can only be supported by a hardware codec that can handle 8-bit 444 video.
+        // If we made it this far, we don't have one, so 444 will not be available.
+        is444Supported = false;
+    }
+
     // Try a regular hardware accelerated HEVC decoder now
     if (chooseDecoder(StreamingPreferences::VDS_FORCE_HARDWARE,
                       window, VIDEO_FORMAT_H265, 1920, 1080, 60,
@@ -470,8 +499,14 @@ bool Session::populateDecoderProperties(SDL_Window* window)
     if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_AV1_MAIN10) {
         videoFormat = VIDEO_FORMAT_AV1_MAIN10;
     }
+    else if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_AV1_HIGH8_444) {
+        videoFormat = VIDEO_FORMAT_AV1_HIGH8_444;
+    }
     else if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_AV1_MAIN8) {
         videoFormat = VIDEO_FORMAT_AV1_MAIN8;
+    }
+    else if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_H265_MAIN8_444) {
+        videoFormat = VIDEO_FORMAT_H265_MAIN8_444;
     }
     else if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_H265_MAIN10) {
         videoFormat = VIDEO_FORMAT_H265_MAIN10;
@@ -678,6 +713,15 @@ bool Session::initialize()
                                                                   m_StreamConfig.fps)) {
             m_StreamConfig.supportedVideoFormats |= VIDEO_FORMAT_H265 | VIDEO_FORMAT_H265_MAIN10;
         }
+        // TODO: Determine if HEVC is better depending on the decoder
+        else if (m_Preferences->enable444 && isHardwareDecodeAvailable(testWindow,
+                                                                  m_Preferences->videoDecoderSelection,
+                                                                  VIDEO_FORMAT_H265_MAIN8_444,
+                                                                  m_StreamConfig.width,
+                                                                  m_StreamConfig.height,
+                                                                  m_StreamConfig.fps)) {
+            m_StreamConfig.supportedVideoFormats |= VIDEO_FORMAT_H265 | VIDEO_FORMAT_H265_MAIN8_444;
+        }
         else if (isHardwareDecodeAvailable(testWindow,
                                            m_Preferences->videoDecoderSelection,
                                            VIDEO_FORMAT_H265,
@@ -712,11 +756,17 @@ bool Session::initialize()
         if (m_Preferences->enableHdr) {
             m_StreamConfig.supportedVideoFormats |= VIDEO_FORMAT_H265_MAIN10;
         }
+        else if (m_Preferences->enable444) {
+            m_StreamConfig.supportedVideoFormats |= VIDEO_FORMAT_H265_MAIN8_444;
+        }
         break;
     case StreamingPreferences::VCC_FORCE_AV1:
         m_StreamConfig.supportedVideoFormats |= VIDEO_FORMAT_AV1_MAIN8;
         if (m_Preferences->enableHdr) {
             m_StreamConfig.supportedVideoFormats |= VIDEO_FORMAT_AV1_MAIN10;
+        }
+        else if (m_Preferences->enable444) {
+            m_StreamConfig.supportedVideoFormats |= VIDEO_FORMAT_AV1_HIGH8_444;
         }
         break;
     }
@@ -818,6 +868,9 @@ bool Session::validateLaunch(SDL_Window* testWindow)
             // straight to H.264 if the user asked for AV1 and the host doesn't support it.
             if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_AV1_MAIN8) {
                 m_StreamConfig.supportedVideoFormats |= VIDEO_FORMAT_H265;
+            }
+            if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_AV1_HIGH8_444) {
+                m_StreamConfig.supportedVideoFormats |= VIDEO_FORMAT_H265_MAIN8_444;
             }
             if (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_AV1_MAIN10) {
                 m_StreamConfig.supportedVideoFormats |= VIDEO_FORMAT_H265_MAIN10;
@@ -930,12 +983,59 @@ bool Session::validateLaunch(SDL_Window* testWindow)
             emitLaunchWarning(tr("This PC's GPU doesn't support 10-bit HEVC or AV1 decoding for HDR streaming."));
         }
 
+    if (m_Preferences->enable444) {
+        // Check that the server GPU supports 444
+        if (!(m_Computer->serverCodecModeSupport & SCM_MASK_444)) {
+            emitLaunchWarning(tr("Your host PC doesn't support 444 streaming."));
+            m_StreamConfig.supportedVideoFormats &= ~VIDEO_FORMAT_MASK_444;
+        }
+        else if (m_Preferences->videoCodecConfig == StreamingPreferences::VCC_FORCE_H264) {
+            emitLaunchWarning(tr("444 is not supported using the H.264 codec."));
+            m_StreamConfig.supportedVideoFormats &= ~VIDEO_FORMAT_MASK_444;
+        }
+        else if (m_Preferences->videoCodecConfig != StreamingPreferences::VCC_AUTO) { // Auto was already checked during init
+            // Check that the available 444-capable codecs on the client and server are compatible
+            if ((m_Computer->serverCodecModeSupport & SCM_AV1_HIGH8_444) && (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_AV1_HIGH8_444)) {
+                if (!isHardwareDecodeAvailable(testWindow,
+                                               m_Preferences->videoDecoderSelection,
+                                               VIDEO_FORMAT_AV1_HIGH8_444,
+                                               m_StreamConfig.width,
+                                               m_StreamConfig.height,
+                                               m_StreamConfig.fps)) {
+                    emitLaunchWarning(tr("This PC's GPU doesn't support AV1 High8 444 decoding for 444 streaming."));
+                    m_StreamConfig.supportedVideoFormats &= ~VIDEO_FORMAT_AV1_HIGH8_444;
+                }
+            }
+            if ((m_Computer->serverCodecModeSupport & SCM_HEVC_MAIN8_444) && (m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_H265_MAIN8_444)) {
+                if (!isHardwareDecodeAvailable(testWindow,
+                                               m_Preferences->videoDecoderSelection,
+                                               VIDEO_FORMAT_H265_MAIN8_444,
+                                               m_StreamConfig.width,
+                                               m_StreamConfig.height,
+                                               m_StreamConfig.fps)) {
+                    emitLaunchWarning(tr("This PC's GPU doesn't support HEVC Main8 444 decoding for 444 streaming."));
+                    m_StreamConfig.supportedVideoFormats &= ~VIDEO_FORMAT_H265_MAIN8_444;
+                }
+            }
+        }
+        else if (!(m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_444)) {
+            emitLaunchWarning(tr("This PC's GPU doesn't support 8-bit 444 HEVC or AV1 decoding for 444 streaming."));
+        }
+
         // Check for compatibility between server and client codecs
         if ((m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_10BIT) && // Ignore this check if we already failed one above
             !(((m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_H265_MAIN10) && (m_Computer->serverCodecModeSupport & SCM_HEVC_MAIN10)) ||
               ((m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_AV1_MAIN10) && (m_Computer->serverCodecModeSupport & SCM_AV1_MAIN10)))) {
             emitLaunchWarning(tr("Your host PC and client PC don't support the same HDR video codecs."));
             m_StreamConfig.supportedVideoFormats &= ~VIDEO_FORMAT_MASK_10BIT;
+        }
+
+        // Check for compatibility between server and client codecs // 444
+        if ((m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_MASK_444) && // Ignore this check if we already failed one above
+            !(((m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_H265_MAIN8_444) && (m_Computer->serverCodecModeSupport & SCM_HEVC_MAIN8_444)) ||
+              ((m_StreamConfig.supportedVideoFormats & VIDEO_FORMAT_AV1_HIGH8_444) && (m_Computer->serverCodecModeSupport & SCM_AV1_HIGH8_444)))) {
+            emitLaunchWarning(tr("Your host PC and client PC don't support the same 444 video codecs."));
+            m_StreamConfig.supportedVideoFormats &= ~VIDEO_FORMAT_MASK_444;
         }
     }
 

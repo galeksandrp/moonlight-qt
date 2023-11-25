@@ -191,7 +191,7 @@ bool DXVA2Renderer::initializeDecoder()
                 break;
             }
         }
-        else if (m_VideoFormat == VIDEO_FORMAT_H265) {
+        else if (m_VideoFormat == VIDEO_FORMAT_H265 ||m_VideoFormat == VIDEO_FORMAT_H265_MAIN8_444) {
             if (IsEqualGUID(guids[i], DXVA2_ModeHEVC_VLD_Main)) {
                 chosenDeviceGuid = guids[i];
                 break;
@@ -205,6 +205,12 @@ bool DXVA2Renderer::initializeDecoder()
         }
         else if (m_VideoFormat == VIDEO_FORMAT_AV1_MAIN8 || m_VideoFormat == VIDEO_FORMAT_AV1_MAIN10) {
             if (IsEqualGUID(guids[i], DXVA2_ModeAV1_VLD_Profile0)) {
+                chosenDeviceGuid = guids[i];
+                break;
+            }
+        }
+        else if (m_VideoFormat == VIDEO_FORMAT_AV1_HIGH8_444) {
+            if (IsEqualGUID(guids[i], DXVA2_ModeAV1_VLD_Profile1)) {
                 chosenDeviceGuid = guids[i];
                 break;
             }

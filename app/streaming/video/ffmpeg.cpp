@@ -458,6 +458,10 @@ bool FFmpegVideoDecoder::completeInitialization(const AVCodec* decoder, enum AVP
             m_Pkt->data = (uint8_t*)k_HEVCMainTestFrame;
             m_Pkt->size = sizeof(k_HEVCMainTestFrame);
             break;
+        case VIDEO_FORMAT_H265_MAIN8_444:
+            m_Pkt->data = (uint8_t*)k_HEVCMainTestFrame;
+            m_Pkt->size = sizeof(k_HEVCMainTestFrame);
+            break;
         case VIDEO_FORMAT_H265_MAIN10:
             m_Pkt->data = (uint8_t*)k_HEVCMain10TestFrame;
             m_Pkt->size = sizeof(k_HEVCMain10TestFrame);
@@ -469,6 +473,10 @@ bool FFmpegVideoDecoder::completeInitialization(const AVCodec* decoder, enum AVP
         case VIDEO_FORMAT_AV1_MAIN10:
             m_Pkt->data = (uint8_t*)k_AV1Main10TestFrame;
             m_Pkt->size = sizeof(k_AV1Main10TestFrame);
+            break;
+        case VIDEO_FORMAT_AV1_HIGH8_444:
+            m_Pkt->data = (uint8_t*)k_AV1High8TestFrame;
+            m_Pkt->size = sizeof(k_AV1High8TestFrame);
             break;
         default:
             SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
@@ -626,6 +634,10 @@ void FFmpegVideoDecoder::stringifyVideoStats(VIDEO_STATS& stats, char* output, i
         codecString = "HEVC";
         break;
 
+    case VIDEO_FORMAT_H265_MAIN8_444:
+        codecString = "HEVC Main 8 SDR 4:4:4";
+        break;
+
     case VIDEO_FORMAT_H265_MAIN10:
         if (LiGetCurrentHostDisplayHdrMode()) {
             codecString = "HEVC Main 10 HDR";
@@ -646,6 +658,10 @@ void FFmpegVideoDecoder::stringifyVideoStats(VIDEO_STATS& stats, char* output, i
         else {
             codecString = "AV1 10-bit SDR";
         }
+        break;
+
+    case VIDEO_FORMAT_AV1_HIGH8_444:
+        codecString = "AV1 8-bit SDR 4:4:4";
         break;
 
     default:
